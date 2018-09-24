@@ -1,7 +1,9 @@
-========
+================
 Solr Cloud added
-========
+================
 
+:author: dwinter
+:date: 2018/08/24
 
 HAYSTACK_CONNECTIONS = {
     'default': {

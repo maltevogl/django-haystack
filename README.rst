@@ -1,4 +1,24 @@
 ========
+Solr Cloud added
+========
+
+
+HAYSTACK_CONNECTIONS = {
+    'default': {
+        'ENGINE': 'haystack.backends.solrCloud_backend.SolrEngine',
+
+        "zk": "XXXX:2281/FOO",
+        "collection": "<mycollection>",
+        "user":  "<myuser>",
+        "password" : "<mypasswd>",
+
+        'EXCLUDED_INDEXES':[
+                            ....
+                            ]
+    },
+}
+
+========
 Haystack
 ========
 

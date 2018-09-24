@@ -20,7 +20,6 @@ HAYSTACK_CONNECTIONS = {
     },
 }
 
-========
 Haystack
 ========
 

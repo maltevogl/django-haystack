@@ -82,7 +82,6 @@ class SolrSearchBackend(BaseSearchBackend):
 
     def update(self, index, iterable, commit=True):
         docs = []
-
         for obj in iterable:
             try:
                 data = index.full_prepare(obj)
@@ -93,7 +92,6 @@ class SolrSearchBackend(BaseSearchBackend):
                     else:
                         data_set["k"] = v
                 docs.append(data_set)
-
             except SkipDocument:
                 self.log.debug("Indexing for object `%s` skipped", obj)
             except UnicodeDecodeError:

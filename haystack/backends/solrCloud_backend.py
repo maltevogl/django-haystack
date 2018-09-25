@@ -6,6 +6,7 @@ import json
 import warnings
 from functools import partial
 
+import requests
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import six
@@ -80,7 +81,7 @@ class Solr(SolrCloud):
             return self.__get_global_handler(attr)
 
     def __get_global_handler(self, name):
-        self.solr = self.get_active_solr()
+        #self.solr = self.get_active_solr()
         return getattr(self.solr, name)
 
 
@@ -117,8 +118,8 @@ class SolrSearchBackend(BaseSearchBackend):
 
         if "zk" not in connection_options:
             raise ImproperlyConfigured(
-                "You must specify a 'zk' (zookeeper str) in your settings for connection '%s'."
-                % connection_alias
+                "You must specify a 'zk' (zookeeper str) in your settings for connection '%s'. (%s)"
+                % (connection_alias,connection_options[connection_alias]),
             )
 
         self.collate = connection_options.get("COLLATE_SPELLING", True)
@@ -142,9 +143,9 @@ class SolrSearchBackend(BaseSearchBackend):
                 data_set = {}
                 for k,v in data.items():
                     if k != "id":
-                        data_set["k"] = {"set":v}
+                        data_set[k] = {"set":v}
                     else:
-                        data_set["k"] = v
+                        data_set[k] = v
                 docs.append(data_set)
 
             except SkipDocument:
@@ -164,7 +165,19 @@ class SolrSearchBackend(BaseSearchBackend):
 
         if len(docs) > 0:
             try:
-                self.conn.add(docs, commit=commit, boost=index.get_field_weights())
+                url = self.conn.url
+                res = requests.post(url +"/update", json=docs)
+                # res = requests.post(solr_url, json=1234)
+                if res.status_code != 200:
+
+                    # logger.debug (res.status_code)
+                    # logger.debug (solr_url)
+                    if res.status_code >= 400:
+                        self.log.error(res.content)
+                        self.log.error(docs)
+                        raise Exception
+
+                #self.conn.update(docs, commit=commit, boost=index.get_field_weights())
             except (IOError, SolrError) as e:
                 if not self.silently_fail:
                     raise

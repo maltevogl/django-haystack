@@ -24,6 +24,8 @@ from haystack.utils import get_identifier, get_model_ct
 from haystack.utils import log as logging
 from haystack.utils.app_loading import haystack_get_model
 
+UPDATE_VERSION=True
+
 try:
     from pysolr import Solr, SolrError
 except ImportError:
@@ -83,7 +85,15 @@ class SolrSearchBackend(BaseSearchBackend):
 
         for obj in iterable:
             try:
-                docs.append(index.full_prepare(obj))
+                data = index.full_prepare(obj)
+                data_set = {}
+                for k,v in data.items():
+                    if k != "id":
+                        data_set["k"] = {"set":v}
+                    else:
+                        data_set["k"] = v
+                docs.append(data_set)
+
             except SkipDocument:
                 self.log.debug("Indexing for object `%s` skipped", obj)
             except UnicodeDecodeError:

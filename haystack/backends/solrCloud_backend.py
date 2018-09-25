@@ -2,11 +2,14 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import json
 import warnings
+from functools import partial
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import six
+from urllib3.exceptions import NewConnectionError
 
 import haystack
 from haystack.backends import (
@@ -27,11 +30,58 @@ from haystack.utils.app_loading import haystack_get_model
 UPDATE_VERSION=True
 
 try:
-    from pysolr import Solr, SolrError
+    from pysolr import Solr as OrigSolr, SolrError
 except ImportError:
     raise MissingDependency(
         "The 'solr' backend requires the installation of 'pysolr'. Please refer to the documentation."
     )
+
+
+from kazoo.client import KazooClient
+
+class SolrCloud(object):
+    def __init__(self,zk,collection,user,password,timeout=None,**args):
+        self.zk = zk
+        self.zoo = KazooClient(zk)
+        self.collection = collection
+        self.timeout = timeout
+        self.args = args
+        self.user = user
+        self.password = password
+        self.solr = self.get_active_solr()
+
+
+    def get_active_solr(self):
+        self.zoo.start()
+        state_path = "/collections/%s/state.json"%self.collection
+        js = self.zoo.get(state_path)
+        config = json.loads(js[0])
+
+        base_urls = []
+        shards = config[self.collection]["shards"]
+        for s,shard in shards.items():
+            for k,rep in shard["replicas"].items():
+                if rep["state"] == "active":
+                    base_url = rep["base_url"]
+                    splitted = base_url.split("//")
+                    base_url = "%s//%s:%s@%s"%(splitted[0],self.user,self.password,splitted[1])
+                    base_urls.append(rep["base_url"]+"/%s"%self.collection)
+
+        if len(base_urls) == 0:
+            raise ValueError ("no active solrs for collection %s and zk %"%(self.collection,self.zk))
+
+        return OrigSolr(base_urls[0],timeout=self.timeout,**self.args) #should  becomae random
+
+class Solr(SolrCloud):
+    def __getattr__(self, attr):
+        try:
+            return super(SolrCloud, self).__getattr__(attr)
+        except AttributeError:
+            return self.__get_global_handler(attr)
+
+    def __get_global_handler(self, name):
+        self.solr = self.get_active_solr()
+        return getattr(self.solr, name)
 
 
 class SolrSearchBackend(BaseSearchBackend):
@@ -65,16 +115,19 @@ class SolrSearchBackend(BaseSearchBackend):
     def __init__(self, connection_alias, **connection_options):
         super(SolrSearchBackend, self).__init__(connection_alias, **connection_options)
 
-        if "URL" not in connection_options:
+        if "zk" not in connection_options:
             raise ImproperlyConfigured(
-                "You must specify a 'URL' in your settings for connection '%s'."
+                "You must specify a 'zk' (zookeeper str) in your settings for connection '%s'."
                 % connection_alias
             )
 
         self.collate = connection_options.get("COLLATE_SPELLING", True)
 
         self.conn = Solr(
-            connection_options["URL"],
+            connection_options["zk"],
+            connection_options["collection"],
+            connection_options["user"],
+            connection_options["password"],
             timeout=self.timeout,
             **connection_options.get("KWARGS", {})
         )

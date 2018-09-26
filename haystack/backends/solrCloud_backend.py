@@ -4,6 +4,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import warnings
+from datetime import date
 from functools import partial
 
 import requests
@@ -141,7 +142,14 @@ class SolrSearchBackend(BaseSearchBackend):
             try:
                 data = index.full_prepare(obj)
                 data_set = {}
+
                 for k,v in data.items():
+
+                    try:
+                        x = json.dumps(v)
+                    except TypeError:
+                        v = str(v)  # nimm string representation
+
                     if k != "id":
                         data_set[k] = {"set":v}
                     else:

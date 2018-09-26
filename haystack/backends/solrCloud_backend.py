@@ -148,6 +148,10 @@ class SolrSearchBackend(BaseSearchBackend):
 
                     if hasattr(v,"isoformat"):
                         v = v.isoformat()
+                        if "T" in v: #alredy a time:
+                            v = v+"Z"
+                        else:
+                            v = v+"T00:00:00Z"
                     try:
                         x = json.dumps(v)
                     except TypeError:

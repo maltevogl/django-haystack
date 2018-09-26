@@ -67,7 +67,7 @@ class SolrCloud(object):
                     base_url = rep["base_url"]
                     splitted = base_url.split("//")
                     base_url = "%s//%s:%s@%s"%(splitted[0],self.user,self.password,splitted[1])
-                    base_urls.append(rep["base_url"]+"/%s"%self.collection)
+                    base_urls.append(base_url+"/%s"%self.collection)
 
         if len(base_urls) == 0:
             raise ValueError ("no active solrs for collection %s and zk %"%(self.collection,self.zk))
@@ -145,6 +145,9 @@ class SolrSearchBackend(BaseSearchBackend):
 
                 for k,v in data.items():
 
+
+                    if hasattr(v,"isoformat"):
+                        v = v.isoformat()
                     try:
                         x = json.dumps(v)
                     except TypeError:

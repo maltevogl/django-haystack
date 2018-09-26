@@ -375,13 +375,13 @@ class SearchQuerySet(object):
         """Accepts an arbitrary number of Model classes to include in the search."""
         clone = self._clone()
 
+        index_models = connections[self.query._using].get_unified_index().get_indexed_models()
+
+        self.log.debug("IM: %s"%index_models)
+
         for model in models:
-            if (
-                model
-                not in connections[self.query._using]
-                .get_unified_index()
-                .get_indexed_models()
-            ):
+            self.log.debug("model: %s (%s)"%(model,type(model)))
+            if model not in index_models:
                 warnings.warn("The model %r is not registered for search." % (model,))
 
             clone.query.add_model(model)

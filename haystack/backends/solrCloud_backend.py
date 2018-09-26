@@ -120,7 +120,7 @@ class SolrSearchBackend(BaseSearchBackend):
         if "zk" not in connection_options:
             raise ImproperlyConfigured(
                 "You must specify a 'zk' (zookeeper str) in your settings for connection '%s'. (%s)"
-                % (connection_alias,connection_options[connection_alias]),
+                % (connection_alias,connection_options),
             )
 
         self.collate = connection_options.get("COLLATE_SPELLING", True)

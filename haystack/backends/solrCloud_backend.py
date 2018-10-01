@@ -191,7 +191,7 @@ class SolrSearchBackend(BaseSearchBackend):
                         self.log.error(res.content)
                         self.log.error(docs)
                         raise Exception
-                res = requests.post(url + "/commit")
+                res = requests.get(url + "/update?commit=true")
                 #self.conn.update(docs, commit=commit, boost=index.get_field_weights())
             except (IOError, SolrError) as e:
                 if not self.silently_fail:

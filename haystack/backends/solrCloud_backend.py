@@ -2,11 +2,16 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import json
 import warnings
+from datetime import date
+from functools import partial
 
+import requests
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import six
+from urllib3.exceptions import NewConnectionError
 
 import haystack
 from haystack.backends import (
@@ -27,11 +32,58 @@ from haystack.utils.app_loading import haystack_get_model
 UPDATE_VERSION=True
 
 try:
-    from pysolr import Solr, SolrError
+    from pysolr import Solr as OrigSolr, SolrError
 except ImportError:
     raise MissingDependency(
         "The 'solr' backend requires the installation of 'pysolr'. Please refer to the documentation."
     )
+
+
+from kazoo.client import KazooClient
+
+class SolrCloud(object):
+    def __init__(self,zk,collection,user,password,timeout=None,**args):
+        self.zk = zk
+        self.zoo = KazooClient(zk)
+        self.collection = collection
+        self.timeout = timeout
+        self.args = args
+        self.user = user
+        self.password = password
+        self.solr = self.get_active_solr()
+
+
+    def get_active_solr(self):
+        self.zoo.start()
+        state_path = "/collections/%s/state.json"%self.collection
+        js = self.zoo.get(state_path)
+        config = json.loads(js[0])
+
+        base_urls = []
+        shards = config[self.collection]["shards"]
+        for s,shard in shards.items():
+            for k,rep in shard["replicas"].items():
+                if rep["state"] == "active":
+                    base_url = rep["base_url"]
+                    splitted = base_url.split("//")
+                    base_url = "%s//%s:%s@%s"%(splitted[0],self.user,self.password,splitted[1])
+                    base_urls.append(base_url+"/%s"%self.collection)
+
+        if len(base_urls) == 0:
+            raise ValueError ("no active solrs for collection %s and zk %"%(self.collection,self.zk))
+
+        return OrigSolr(base_urls[0],timeout=self.timeout,**self.args) #should  becomae random
+
+class Solr(SolrCloud):
+    def __getattr__(self, attr):
+        try:
+            return super(SolrCloud, self).__getattr__(attr)
+        except AttributeError:
+            return self.__get_global_handler(attr)
+
+    def __get_global_handler(self, name):
+        #self.solr = self.get_active_solr()
+        return getattr(self.solr, name)
 
 
 class SolrSearchBackend(BaseSearchBackend):
@@ -65,16 +117,19 @@ class SolrSearchBackend(BaseSearchBackend):
     def __init__(self, connection_alias, **connection_options):
         super(SolrSearchBackend, self).__init__(connection_alias, **connection_options)
 
-        if "URL" not in connection_options:
+        if "zk" not in connection_options:
             raise ImproperlyConfigured(
-                "You must specify a 'URL' in your settings for connection '%s'."
-                % connection_alias
+                "You must specify a 'zk' (zookeeper str) in your settings for connection '%s'. (%s)"
+                % (connection_alias,connection_options),
             )
 
         self.collate = connection_options.get("COLLATE_SPELLING", True)
 
         self.conn = Solr(
-            connection_options["URL"],
+            connection_options["zk"],
+            connection_options["collection"],
+            connection_options["user"],
+            connection_options["password"],
             timeout=self.timeout,
             **connection_options.get("KWARGS", {})
         )
@@ -82,16 +137,32 @@ class SolrSearchBackend(BaseSearchBackend):
 
     def update(self, index, iterable, commit=True):
         docs = []
+
         for obj in iterable:
             try:
                 data = index.full_prepare(obj)
                 data_set = {}
+
                 for k,v in data.items():
+
+
+                    if hasattr(v,"isoformat"):
+                        v = v.isoformat()
+                        if "T" in v: #alredy a time:
+                            v = v+"Z"
+                        else:
+                            v = v+"T00:00:00Z"
+                    try:
+                        x = json.dumps(v)
+                    except TypeError:
+                        v = str(v)  # nimm string representation
+
                     if k != "id":
-                        data_set["k"] = {"set":v}
+                        data_set[k] = {"set":v}
                     else:
-                        data_set["k"] = v
+                        data_set[k] = v
                 docs.append(data_set)
+
             except SkipDocument:
                 self.log.debug("Indexing for object `%s` skipped", obj)
             except UnicodeDecodeError:
@@ -109,7 +180,19 @@ class SolrSearchBackend(BaseSearchBackend):
 
         if len(docs) > 0:
             try:
-                self.conn.add(docs, commit=commit, boost=index.get_field_weights())
+                url = self.conn.url
+                res = requests.post(url +"/update", json=docs)
+                # res = requests.post(solr_url, json=1234)
+                if res.status_code != 200:
+
+                    # logger.debug (res.status_code)
+                    # logger.debug (solr_url)
+                    if res.status_code >= 400:
+                        self.log.error(res.content)
+                        self.log.error(docs)
+                        raise Exception
+                res = requests.get(url + "/update?commit=true")
+                #self.conn.update(docs, commit=commit, boost=index.get_field_weights())
             except (IOError, SolrError) as e:
                 if not self.silently_fail:
                     raise

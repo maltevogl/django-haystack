@@ -6,6 +6,8 @@ import copy
 import inspect
 import threading
 import warnings
+import logging
+logger = logging.getLogger(__name__)
 from collections import OrderedDict
 
 from django.conf import settings
@@ -202,6 +204,7 @@ class UnifiedIndex(object):
         indexes = []
 
         for app_mod in haystack_get_app_modules():
+            logger.debug("trying: %s"%app_mod.__name__)
             try:
                 search_index_module = importlib.import_module(
                     "%s.search_indexes" % app_mod.__name__
@@ -209,7 +212,7 @@ class UnifiedIndex(object):
             except ImportError:
                 if module_has_submodule(app_mod, "search_indexes"):
                     raise
-
+                logger.debug("no search index!")
                 continue
 
             for item_name, item in inspect.getmembers(
@@ -230,7 +233,7 @@ class UnifiedIndex(object):
                         continue
 
                     indexes.append(item())
-
+        logger.debug("now I have the indices: %s"%indexes)
         return indexes
 
     def reset(self):
@@ -246,8 +249,10 @@ class UnifiedIndex(object):
         if indexes is None:
             indexes = self.collect_indexes()
 
+        logger.debug("search for models and indices")
         for index in indexes:
             model = index.get_model()
+            logger.debug("model %s - index %s"%(model,index))
 
             if model in self._indexes:
                 raise ImproperlyConfigured(
@@ -335,6 +340,7 @@ class UnifiedIndex(object):
 
     def get_indexed_models(self):
         # Ensuring a list here since Python3 will give us an iterator
+        logger.debug("get_indexed_models: %s"%self.get_indexes().keys())
         return list(self.get_indexes().keys())
 
     def get_index_fieldname(self, field):

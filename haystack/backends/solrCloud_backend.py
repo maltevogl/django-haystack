@@ -55,6 +55,11 @@ class SolrCloud(object):
 
     def get_active_solr(self):
         self.zoo.start()
+
+        live_node_path = "/live_nodes"
+        live_nodes = self.zoo.get_children(live_node_path)
+            
+        self.log.debug("live: %s" % ".".join(live_nodes))
         state_path = "/collections/%s/state.json"%self.collection
         js = self.zoo.get(state_path)
         config = json.loads(js[0])
@@ -63,6 +68,9 @@ class SolrCloud(object):
         shards = config[self.collection]["shards"]
         for s,shard in shards.items():
             for k,rep in shard["replicas"].items():
+                self.log.debug(rep)
+                if not rep["node_name"] in live_nodes:
+                    continue
                 if rep["state"] == "active":
                     base_url = rep["base_url"]
                     splitted = base_url.split("//")
@@ -70,7 +78,7 @@ class SolrCloud(object):
                     base_urls.append(base_url+"/%s"%self.collection)
 
         if len(base_urls) == 0:
-            raise ValueError ("no active solrs for collection %s and zk %"%(self.collection,self.zk))
+            raise ValueError ("no active solrs for collection %s and zk %s"%(self.collection,self.zk))
 
         return OrigSolr(base_urls[0],timeout=self.timeout,**self.args) #should  becomae random
 

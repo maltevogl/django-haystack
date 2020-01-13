@@ -59,7 +59,7 @@ class SolrCloud(object):
         live_node_path = "/live_nodes"
         live_nodes = self.zoo.get_children(live_node_path)
             
-        self.log.debug("live: %s" % ".".join(live_nodes))
+        #self.log.debug("live: %s" % ".".join(live_nodes))
         state_path = "/collections/%s/state.json"%self.collection
         js = self.zoo.get(state_path)
         config = json.loads(js[0])
@@ -68,7 +68,7 @@ class SolrCloud(object):
         shards = config[self.collection]["shards"]
         for s,shard in shards.items():
             for k,rep in shard["replicas"].items():
-                self.log.debug(rep)
+                #self.log.debug(rep)
                 if not rep["node_name"] in live_nodes:
                     continue
                 if rep["state"] == "active":

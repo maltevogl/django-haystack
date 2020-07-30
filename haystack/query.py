@@ -5,8 +5,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import operator
 import warnings
 
-from django.utils import six
-
 from haystack import connection_router, connections
 from haystack.backends import SQ
 from haystack.constants import DEFAULT_OPERATOR, ITERATOR_LOAD_PER_QUERY
@@ -283,7 +281,7 @@ class SearchQuerySet(object):
         """
         Retrieves an item or slice from the set of results.
         """
-        if not isinstance(k, (slice, six.integer_types)):
+        if not isinstance(k, (slice, int)):
             raise TypeError
         assert (not isinstance(k, slice) and (k >= 0)) or (
             isinstance(k, slice)
@@ -513,7 +511,7 @@ class SearchQuerySet(object):
                     kwargs = {field_name: bit}
                     query_bits.append(SQ(**kwargs))
 
-        return clone.filter(six.moves.reduce(operator.__and__, query_bits))
+        return clone.filter(functools.reduce(operator.__and__, query_bits))
 
     def using(self, connection_name):
         """
